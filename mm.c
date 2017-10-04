@@ -49,10 +49,22 @@ int mm_init(void)
     return 0;
 }
 
+
+// There are several ways to keep track of the free blocks:
+// 1. Implicit list using length - links all blocks
+// 2. Explicit list among the free blocks using pointers
+// 3. Segregated free list
+// 4. Blocks sorted by size
+// I'm planning to do segregated free lists, since it was the most advanced method covered in class.
+// Seems to perform a lot better than explicit and implicit lists.
+
 /* 
  * mm_malloc - Allocate a block by incrementing the brk pointer.
  *     Always allocate a block whose size is a multiple of the alignment.
  */
+ // On success: return pointer to memory block of at least size bytes (aligned to 8 byte boundary)
+ // if size is 0, it returns NULL.
+ // On fail: NULL(0), and sets errno.
 void *mm_malloc(size_t size)
 {
     int newsize = ALIGN(size + SIZE_T_SIZE);
@@ -68,6 +80,9 @@ void *mm_malloc(size_t size)
 /*
  * mm_free - Freeing a block does nothing.
  */
+// Returns the block pointed at by ptr to a pool of available memory.
+// p comes from a previous malloc or realloc call.
+// In other words, frees the memory so the OS knows it can be used for other things again.
 void mm_free(void *ptr)
 {
 }
@@ -75,6 +90,7 @@ void mm_free(void *ptr)
 /*
  * mm_realloc - Implemented simply in terms of mm_malloc and mm_free
  */
+// Change size of a previously allocated memory block.
 void *mm_realloc(void *ptr, size_t size)
 {
     void *oldptr = ptr;
@@ -91,17 +107,3 @@ void *mm_realloc(void *ptr, size_t size)
     mm_free(oldptr);
     return newptr;
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
