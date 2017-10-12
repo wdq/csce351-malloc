@@ -1,5 +1,5 @@
 /* 
- * mm-implicit.c -  Simple allocator based on implicit free lists, 
+ * mm.c -  A hopefully better allocator based on explicit free lists, 
  *                  first fit placement, and boundary tag coalescing. 
  *
  * Each block has header and footer of the form:
@@ -10,7 +10,19 @@
  *      ----------------------------------- 
  * 
  * where s are the meaningful size bits and a/f is set 
- * iff the block is allocated. The list has the following form:
+ * iff the block is allocated. 
+ *
+ * Each free block has two pointers stored directly underneath the header.
+ * The form:
+ *
+ *            31                        0
+ * Header    [        size         | a/f ]
+ * Next      [        next_ptr           ]
+ * Previous  [        previous_ptr       ] 
+ *
+ *
+ *
+ * The list has the following form:
  *
  * begin                                                          end
  * heap                                                           heap  
@@ -44,6 +56,7 @@ team_t team = {
 #define DSIZE       8       /* doubleword size (bytes) */
 #define CHUNKSIZE  (1<<12)  /* initial heap size (bytes) */
 #define OVERHEAD    8       /* overhead of header and footer (bytes) */
+#define MIN_BLOCK_SIZE 24
 
 #define MAX(x, y) ((x) > (y)? (x) : (y))  
 
@@ -69,6 +82,7 @@ team_t team = {
 
 /* Global variables */
 static char *heap_listp;  /* pointer to first block */  
+static char *free_listp;  /* pointer to the first free block */
 
 /* function prototypes for internal helper routines */
 static void *extend_heap(size_t words);
@@ -88,12 +102,20 @@ int mm_init(void)
     if ((heap_listp = mem_sbrk(4*WSIZE)) == NULL) {
 	   return -1;
     }
-    PUT(heap_listp, 0);                        /* alignment padding */
-    PUT(heap_listp+WSIZE, PACK(OVERHEAD, 1));  /* prologue header */ 
-    PUT(heap_listp+DSIZE, PACK(OVERHEAD, 1));  /* prologue footer */ 
-    PUT(heap_listp+WSIZE+DSIZE, PACK(0, 1));   /* epilogue header */
-    heap_listp += DSIZE;
 
+    /* alignment padding */
+    PUT(heap_listp, 0);                        
+
+    // Header
+    PUT(heap_listp + WSIZE, PACK(MIN_BLOCK_SIZE, 1)); // size and a/f part of header
+    PUT(heap_listp + DSIZE, 0); // pointer to next free block
+    PUT(heap_listp + DSIZE + WSIZE, 0); // pointer to previous free block
+
+    // Footer
+    PUT(heap_listp + MIN_BLOCK_SIZE, PACK(MIN_BLOCK_SIZE, 1)); // size and a/f part of footer
+    PUT(heap_listp + WSIZE + MIN_BLOCK_SIZE, PACK(0, 1)); // epilogue header
+
+    free_listp = heap_listp + DSIZE; // Start of free area is after the above allocated stuff
 
     /* Extend the empty heap with a free block of CHUNKSIZE bytes */
     if (extend_heap(CHUNKSIZE/WSIZE) == NULL) {
