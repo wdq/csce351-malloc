@@ -59,14 +59,14 @@ team_t team = {
 #define GET_ALLOC(p) (GET(p) & 0x1)
 
 /* Given block ptr bp, compute address of its header and footer */
-#define HEADER_POINTER(bp)       ((char *)(bp) - WORD_SIZE)
-#define NEXT_FREE_POINTER  
-#define PREVIOUS_FREE_POINTER
-#define FOOTER_POINTER(bp)       ((char *)(bp) + GET_SIZE(HEADER_POINTER(bp)) - DOUBLE_SIZE)
+#define HEADER_POINTER(bp)          ((char *)(bp) - WORD_SIZE)
+#define NEXT_FREE_POINTER(bp)       ((char *)(bp)) 
+#define PREVIOUS_FREE_POINTER(bp)   ((char *)(bp) + WORD_SIZE)
+#define FOOTER_POINTER(bp)          ((char *)(bp) + GET_SIZE(HEADER_POINTER(bp)) - DOUBLE_SIZE)
 
 /* Given block ptr bp, compute address of next and previous blocks */
-#define NEXT_BLKP(bp)  ((char *)(bp) + GET_SIZE(((char *)(bp) - WORD_SIZE)))
-#define PREV_BLKP(bp)  ((char *)(bp) - GET_SIZE(((char *)(bp) - DOUBLE_SIZE)))
+#define NEXT_BLOCK_POINTER(bp)  ((char *)(bp) + GET_SIZE(((char *)(bp) - WORD_SIZE)))
+#define PREVIOUS_BLOCK_POINTER(bp)  ((char *)(bp) - GET_SIZE(((char *)(bp) - DOUBLE_SIZE)))
 /* $end mallocmacros */
 
 /* Global variables */
@@ -195,7 +195,7 @@ void mm_checkheap(int verbose)
 	printf("Bad prologue header\n");
     checkblock(heap_listp);
 
-    for (bp = heap_listp; GET_SIZE(HEADER_POINTER(bp)) > 0; bp = NEXT_BLKP(bp)) {
+    for (bp = heap_listp; GET_SIZE(HEADER_POINTER(bp)) > 0; bp = NEXT_BLOCK_POINTER(bp)) {
 	if (verbose) 
 	    printblock(bp);
 	checkblock(bp);
@@ -226,7 +226,7 @@ static void *extend_heap(size_t words)
     /* Initialize free block header/footer and the epilogue header */
     PUT(HEADER_POINTER(bp), PACK(size, 0));         /* free block header */
     PUT(FOOTER_POINTER(bp), PACK(size, 0));         /* free block footer */
-    PUT(HEADER_POINTER(NEXT_BLKP(bp)), PACK(0, 1)); /* new epilogue header */
+    PUT(HEADER_POINTER(NEXT_BLOCK_POINTER(bp)), PACK(0, 1)); /* new epilogue header */
 
     /* Coalesce if the previous block was free */
     return coalesce(bp);
@@ -247,7 +247,7 @@ static void place(void *bp, size_t asize)
     if ((csize - asize) >= (DOUBLE_SIZE + OVERHEAD)) { 
 	PUT(HEADER_POINTER(bp), PACK(asize, 1));
 	PUT(FOOTER_POINTER(bp), PACK(asize, 1));
-	bp = NEXT_BLKP(bp);
+	bp = NEXT_BLOCK_POINTER(bp);
 	PUT(HEADER_POINTER(bp), PACK(csize-asize, 0));
 	PUT(FOOTER_POINTER(bp), PACK(csize-asize, 0));
     }
@@ -266,7 +266,7 @@ static void *find_fit(size_t asize)
     /* first fit search */
     void *bp;
 
-    for (bp = heap_listp; GET_SIZE(HEADER_POINTER(bp)) > 0; bp = NEXT_BLKP(bp)) {
+    for (bp = heap_listp; GET_SIZE(HEADER_POINTER(bp)) > 0; bp = NEXT_BLOCK_POINTER(bp)) {
     	if (!GET_ALLOC(HEADER_POINTER(bp)) && (asize <= GET_SIZE(HEADER_POINTER(bp)))) {
     	    return bp;
     	}
@@ -279,8 +279,8 @@ static void *find_fit(size_t asize)
  */
 static void *coalesce(void *bp) 
 {
-    size_t prev_alloc = GET_ALLOC(FOOTER_POINTER(PREV_BLKP(bp)));
-    size_t next_alloc = GET_ALLOC(HEADER_POINTER(NEXT_BLKP(bp)));
+    size_t prev_alloc = GET_ALLOC(FOOTER_POINTER(PREVIOUS_BLOCK_POINTER(bp)));
+    size_t next_alloc = GET_ALLOC(HEADER_POINTER(NEXT_BLOCK_POINTER(bp)));
     size_t size = GET_SIZE(HEADER_POINTER(bp));
 
     if (prev_alloc && next_alloc) {            /* Case 1 */
@@ -288,24 +288,24 @@ static void *coalesce(void *bp)
     }
 
     else if (prev_alloc && !next_alloc) {      /* Case 2 */
-	size += GET_SIZE(HEADER_POINTER(NEXT_BLKP(bp)));
+	size += GET_SIZE(HEADER_POINTER(NEXT_BLOCK_POINTER(bp)));
 	PUT(HEADER_POINTER(bp), PACK(size, 0));
 	PUT(FOOTER_POINTER(bp), PACK(size,0));
     }
 
     else if (!prev_alloc && next_alloc) {      /* Case 3 */
-	size += GET_SIZE(HEADER_POINTER(PREV_BLKP(bp)));
+	size += GET_SIZE(HEADER_POINTER(PREVIOUS_BLOCK_POINTER(bp)));
 	PUT(FOOTER_POINTER(bp), PACK(size, 0));
-	PUT(HEADER_POINTER(PREV_BLKP(bp)), PACK(size, 0));
-	bp = PREV_BLKP(bp);
+	PUT(HEADER_POINTER(PREVIOUS_BLOCK_POINTER(bp)), PACK(size, 0));
+	bp = PREVIOUS_BLOCK_POINTER(bp);
     }
 
     else {                                     /* Case 4 */
-	size += GET_SIZE(HEADER_POINTER(PREV_BLKP(bp))) + 
-	    GET_SIZE(FOOTER_POINTER(NEXT_BLKP(bp)));
-	PUT(HEADER_POINTER(PREV_BLKP(bp)), PACK(size, 0));
-	PUT(FOOTER_POINTER(NEXT_BLKP(bp)), PACK(size, 0));
-	bp = PREV_BLKP(bp);
+	size += GET_SIZE(HEADER_POINTER(PREVIOUS_BLOCK_POINTER(bp))) + 
+	    GET_SIZE(FOOTER_POINTER(NEXT_BLOCK_POINTER(bp)));
+	PUT(HEADER_POINTER(PREVIOUS_BLOCK_POINTER(bp)), PACK(size, 0));
+	PUT(FOOTER_POINTER(NEXT_BLOCK_POINTER(bp)), PACK(size, 0));
+	bp = PREVIOUS_BLOCK_POINTER(bp);
     }
 
     return bp;
