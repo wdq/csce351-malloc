@@ -33,16 +33,16 @@
 
 /* Team structure */
 team_t team = {
-    "implicit first fit", 
-    "Unknown Person", "anonymous",
+    "not-a-team-team", 
+    "William Quade", "liam@quade.co",
     "", ""
 }; 
 
 /* $begin mallocmacros */
 /* Basic constants and macros */
-#define WSIZE       4       /* word size (bytes) */  
-#define DSIZE       8       /* doubleword size (bytes) */
-#define CHUNKSIZE  (1<<12)  /* initial heap size (bytes) */
+#define WORD_SIZE       4       /* word size (bytes) */  
+#define DOUBLE_SIZE       8       /* doubleword size (bytes) */
+#define CHUNK_SIZE  (1<<12)  /* initial heap size (bytes) */
 #define OVERHEAD    8       /* overhead of header and footer (bytes) */
 
 #define MAX(x, y) ((x) > (y)? (x) : (y))  
@@ -59,12 +59,14 @@ team_t team = {
 #define GET_ALLOC(p) (GET(p) & 0x1)
 
 /* Given block ptr bp, compute address of its header and footer */
-#define HDRP(bp)       ((char *)(bp) - WSIZE)  
-#define FTRP(bp)       ((char *)(bp) + GET_SIZE(HDRP(bp)) - DSIZE)
+#define HEADER_POINTER(bp)       ((char *)(bp) - WORD_SIZE)
+#define NEXT_FREE_POINTER  
+#define PREVIOUS_FREE_POINTER
+#define FOOTER_POINTER(bp)       ((char *)(bp) + GET_SIZE(HEADER_POINTER(bp)) - DOUBLE_SIZE)
 
 /* Given block ptr bp, compute address of next and previous blocks */
-#define NEXT_BLKP(bp)  ((char *)(bp) + GET_SIZE(((char *)(bp) - WSIZE)))
-#define PREV_BLKP(bp)  ((char *)(bp) - GET_SIZE(((char *)(bp) - DSIZE)))
+#define NEXT_BLKP(bp)  ((char *)(bp) + GET_SIZE(((char *)(bp) - WORD_SIZE)))
+#define PREV_BLKP(bp)  ((char *)(bp) - GET_SIZE(((char *)(bp) - DOUBLE_SIZE)))
 /* $end mallocmacros */
 
 /* Global variables */
@@ -84,18 +86,21 @@ static void checkblock(void *bp);
 /* $begin mminit */
 int mm_init(void) 
 {
+    // Explicit free list starts out the same as implicit free list?
+    // Since they start out as all free.
+
     /* create the initial empty heap */
-    if ((heap_listp = mem_sbrk(4*WSIZE)) == NULL)
+    if ((heap_listp = mem_sbrk(4*WORD_SIZE)) == NULL)
 	return -1;
     PUT(heap_listp, 0);                        /* alignment padding */
-    PUT(heap_listp+WSIZE, PACK(OVERHEAD, 1));  /* prologue header */ 
-    PUT(heap_listp+DSIZE, PACK(OVERHEAD, 1));  /* prologue footer */ 
-    PUT(heap_listp+WSIZE+DSIZE, PACK(0, 1));   /* epilogue header */
-    heap_listp += DSIZE;
+    PUT(heap_listp+WORD_SIZE, PACK(OVERHEAD, 1));  /* prologue header */ 
+    PUT(heap_listp+DOUBLE_SIZE, PACK(OVERHEAD, 1));  /* prologue footer */ 
+    PUT(heap_listp+WORD_SIZE+DOUBLE_SIZE, PACK(0, 1));   /* epilogue header */
+    heap_listp += DOUBLE_SIZE;
 
 
-    /* Extend the empty heap with a free block of CHUNKSIZE bytes */
-    if (extend_heap(CHUNKSIZE/WSIZE) == NULL)
+    /* Extend the empty heap with a free block of CHUNK_SIZE bytes */
+    if (extend_heap(CHUNK_SIZE/WORD_SIZE) == NULL)
 	return -1;
     return 0;
 }
@@ -108,29 +113,34 @@ int mm_init(void)
 void *mm_malloc(size_t size) 
 {
     size_t asize;      /* adjusted block size */
-    size_t extendsize; /* amount to extend heap if no fit */
+    size_t extenDOUBLE_SIZE; /* amount to extend heap if no fit */
     char *bp;      
 
     /* Ignore spurious requests */
-    if (size <= 0)
-	return NULL;
+    if (size <= 0) {
+        return NULL;
+    }
 
     /* Adjust block size to include overhead and alignment reqs. */
-    if (size <= DSIZE)
-	asize = DSIZE + OVERHEAD;
-    else
-	asize = DSIZE * ((size + (OVERHEAD) + (DSIZE-1)) / DSIZE);
-    
+    if (size <= DOUBLE_SIZE) {
+	   asize = DOUBLE_SIZE + OVERHEAD;
+    } else {
+	   asize = DOUBLE_SIZE * ((size + (OVERHEAD) + (DOUBLE_SIZE-1)) / DOUBLE_SIZE);
+    }
+
     /* Search the free list for a fit */
     if ((bp = find_fit(asize)) != NULL) {
-	place(bp, asize);
-	return bp;
+	   place(bp, asize);
+	   return bp;
     }
 
     /* No fit found. Get more memory and place the block */
-    extendsize = MAX(asize,CHUNKSIZE);
-    if ((bp = extend_heap(extendsize/WSIZE)) == NULL)
-	return NULL;
+    extenDOUBLE_SIZE = MAX(asize,CHUNK_SIZE);
+    
+    if ((bp = extend_heap(extenDOUBLE_SIZE/WORD_SIZE)) == NULL) {
+	   return NULL;
+    }
+
     place(bp, asize);
     return bp;
 } 
@@ -142,10 +152,10 @@ void *mm_malloc(size_t size)
 /* $begin mmfree */
 void mm_free(void *bp)
 {
-    size_t size = GET_SIZE(HDRP(bp));
+    size_t size = GET_SIZE(HEADER_POINTER(bp));
 
-    PUT(HDRP(bp), PACK(size, 0));
-    PUT(FTRP(bp), PACK(size, 0));
+    PUT(HEADER_POINTER(bp), PACK(size, 0));
+    PUT(FOOTER_POINTER(bp), PACK(size, 0));
     coalesce(bp);
 }
 
@@ -163,7 +173,7 @@ void *mm_realloc(void *ptr, size_t size)
 	printf("ERROR: mm_malloc failed in mm_realloc\n");
 	exit(1);
     }
-    copySize = GET_SIZE(HDRP(ptr));
+    copySize = GET_SIZE(HEADER_POINTER(ptr));
     if (size < copySize)
       copySize = size;
     memcpy(newp, ptr, copySize);
@@ -181,11 +191,11 @@ void mm_checkheap(int verbose)
     if (verbose)
 	printf("Heap (%p):\n", heap_listp);
 
-    if ((GET_SIZE(HDRP(heap_listp)) != DSIZE) || !GET_ALLOC(HDRP(heap_listp)))
+    if ((GET_SIZE(HEADER_POINTER(heap_listp)) != DOUBLE_SIZE) || !GET_ALLOC(HEADER_POINTER(heap_listp)))
 	printf("Bad prologue header\n");
     checkblock(heap_listp);
 
-    for (bp = heap_listp; GET_SIZE(HDRP(bp)) > 0; bp = NEXT_BLKP(bp)) {
+    for (bp = heap_listp; GET_SIZE(HEADER_POINTER(bp)) > 0; bp = NEXT_BLKP(bp)) {
 	if (verbose) 
 	    printblock(bp);
 	checkblock(bp);
@@ -193,7 +203,7 @@ void mm_checkheap(int verbose)
      
     if (verbose)
 	printblock(bp);
-    if ((GET_SIZE(HDRP(bp)) != 0) || !(GET_ALLOC(HDRP(bp))))
+    if ((GET_SIZE(HEADER_POINTER(bp)) != 0) || !(GET_ALLOC(HEADER_POINTER(bp))))
 	printf("Bad epilogue header\n");
 }
 
@@ -209,14 +219,14 @@ static void *extend_heap(size_t words)
     size_t size;
 	
     /* Allocate an even number of words to maintain alignment */
-    size = (words % 2) ? (words+1) * WSIZE : words * WSIZE;
+    size = (words % 2) ? (words+1) * WORD_SIZE : words * WORD_SIZE;
     if ((bp = mem_sbrk(size)) == (void *)-1) 
 	return NULL;
 
     /* Initialize free block header/footer and the epilogue header */
-    PUT(HDRP(bp), PACK(size, 0));         /* free block header */
-    PUT(FTRP(bp), PACK(size, 0));         /* free block footer */
-    PUT(HDRP(NEXT_BLKP(bp)), PACK(0, 1)); /* new epilogue header */
+    PUT(HEADER_POINTER(bp), PACK(size, 0));         /* free block header */
+    PUT(FOOTER_POINTER(bp), PACK(size, 0));         /* free block footer */
+    PUT(HEADER_POINTER(NEXT_BLKP(bp)), PACK(0, 1)); /* new epilogue header */
 
     /* Coalesce if the previous block was free */
     return coalesce(bp);
@@ -232,18 +242,18 @@ static void *extend_heap(size_t words)
 static void place(void *bp, size_t asize)
 /* $end mmplace-proto */
 {
-    size_t csize = GET_SIZE(HDRP(bp));   
+    size_t csize = GET_SIZE(HEADER_POINTER(bp));   
 
-    if ((csize - asize) >= (DSIZE + OVERHEAD)) { 
-	PUT(HDRP(bp), PACK(asize, 1));
-	PUT(FTRP(bp), PACK(asize, 1));
+    if ((csize - asize) >= (DOUBLE_SIZE + OVERHEAD)) { 
+	PUT(HEADER_POINTER(bp), PACK(asize, 1));
+	PUT(FOOTER_POINTER(bp), PACK(asize, 1));
 	bp = NEXT_BLKP(bp);
-	PUT(HDRP(bp), PACK(csize-asize, 0));
-	PUT(FTRP(bp), PACK(csize-asize, 0));
+	PUT(HEADER_POINTER(bp), PACK(csize-asize, 0));
+	PUT(FOOTER_POINTER(bp), PACK(csize-asize, 0));
     }
     else { 
-	PUT(HDRP(bp), PACK(csize, 1));
-	PUT(FTRP(bp), PACK(csize, 1));
+	PUT(HEADER_POINTER(bp), PACK(csize, 1));
+	PUT(FOOTER_POINTER(bp), PACK(csize, 1));
     }
 }
 /* $end mmplace */
@@ -256,10 +266,10 @@ static void *find_fit(size_t asize)
     /* first fit search */
     void *bp;
 
-    for (bp = heap_listp; GET_SIZE(HDRP(bp)) > 0; bp = NEXT_BLKP(bp)) {
-	if (!GET_ALLOC(HDRP(bp)) && (asize <= GET_SIZE(HDRP(bp)))) {
-	    return bp;
-	}
+    for (bp = heap_listp; GET_SIZE(HEADER_POINTER(bp)) > 0; bp = NEXT_BLKP(bp)) {
+    	if (!GET_ALLOC(HEADER_POINTER(bp)) && (asize <= GET_SIZE(HEADER_POINTER(bp)))) {
+    	    return bp;
+    	}
     }
     return NULL; /* no fit */
 }
@@ -269,32 +279,32 @@ static void *find_fit(size_t asize)
  */
 static void *coalesce(void *bp) 
 {
-    size_t prev_alloc = GET_ALLOC(FTRP(PREV_BLKP(bp)));
-    size_t next_alloc = GET_ALLOC(HDRP(NEXT_BLKP(bp)));
-    size_t size = GET_SIZE(HDRP(bp));
+    size_t prev_alloc = GET_ALLOC(FOOTER_POINTER(PREV_BLKP(bp)));
+    size_t next_alloc = GET_ALLOC(HEADER_POINTER(NEXT_BLKP(bp)));
+    size_t size = GET_SIZE(HEADER_POINTER(bp));
 
     if (prev_alloc && next_alloc) {            /* Case 1 */
 	return bp;
     }
 
     else if (prev_alloc && !next_alloc) {      /* Case 2 */
-	size += GET_SIZE(HDRP(NEXT_BLKP(bp)));
-	PUT(HDRP(bp), PACK(size, 0));
-	PUT(FTRP(bp), PACK(size,0));
+	size += GET_SIZE(HEADER_POINTER(NEXT_BLKP(bp)));
+	PUT(HEADER_POINTER(bp), PACK(size, 0));
+	PUT(FOOTER_POINTER(bp), PACK(size,0));
     }
 
     else if (!prev_alloc && next_alloc) {      /* Case 3 */
-	size += GET_SIZE(HDRP(PREV_BLKP(bp)));
-	PUT(FTRP(bp), PACK(size, 0));
-	PUT(HDRP(PREV_BLKP(bp)), PACK(size, 0));
+	size += GET_SIZE(HEADER_POINTER(PREV_BLKP(bp)));
+	PUT(FOOTER_POINTER(bp), PACK(size, 0));
+	PUT(HEADER_POINTER(PREV_BLKP(bp)), PACK(size, 0));
 	bp = PREV_BLKP(bp);
     }
 
     else {                                     /* Case 4 */
-	size += GET_SIZE(HDRP(PREV_BLKP(bp))) + 
-	    GET_SIZE(FTRP(NEXT_BLKP(bp)));
-	PUT(HDRP(PREV_BLKP(bp)), PACK(size, 0));
-	PUT(FTRP(NEXT_BLKP(bp)), PACK(size, 0));
+	size += GET_SIZE(HEADER_POINTER(PREV_BLKP(bp))) + 
+	    GET_SIZE(FOOTER_POINTER(NEXT_BLKP(bp)));
+	PUT(HEADER_POINTER(PREV_BLKP(bp)), PACK(size, 0));
+	PUT(FOOTER_POINTER(NEXT_BLKP(bp)), PACK(size, 0));
 	bp = PREV_BLKP(bp);
     }
 
@@ -306,10 +316,10 @@ static void printblock(void *bp)
 {
     size_t hsize, halloc, fsize, falloc;
 
-    hsize = GET_SIZE(HDRP(bp));
-    halloc = GET_ALLOC(HDRP(bp));  
-    fsize = GET_SIZE(FTRP(bp));
-    falloc = GET_ALLOC(FTRP(bp));  
+    hsize = GET_SIZE(HEADER_POINTER(bp));
+    halloc = GET_ALLOC(HEADER_POINTER(bp));  
+    fsize = GET_SIZE(FOOTER_POINTER(bp));
+    falloc = GET_ALLOC(FOOTER_POINTER(bp));  
     
     if (hsize == 0) {
 	printf("%p: EOL\n", bp);
@@ -325,7 +335,7 @@ static void checkblock(void *bp)
 {
     if ((size_t)bp % 8)
 	printf("Error: %p is not doubleword aligned\n", bp);
-    if (GET(HDRP(bp)) != GET(FTRP(bp)))
+    if (GET(HEADER_POINTER(bp)) != GET(FOOTER_POINTER(bp)))
 	printf("Error: header does not match footer\n");
 }
 
