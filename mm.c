@@ -71,6 +71,7 @@ team_t team = {
 static char *heap_listp;  /* pointer to first block */  
 static char *free_listp;
 static char *last_freed = 0;
+static int notCoalesceCount = 0;
 
 /* function prototypes for internal helper routines */
 static void *extend_heap(size_t words);
@@ -166,7 +167,7 @@ void mm_free(void *bp)
 
     PUT(HDRP(bp), PACK(size, 0));
     PUT(FTRP(bp), PACK(size, 0));
-    //coalesce(bp);
+    coalesce(bp);
 }
 
 /* $end mmfree */
@@ -231,6 +232,7 @@ void mm_checkheap(int verbose)
 /* $begin mmextendheap */
 static void *extend_heap(size_t words) 
 {
+    last_freed = 0;
     char *bp;
     size_t size;
     
@@ -304,6 +306,7 @@ static void *find_fit(size_t asize)
  */
 static void *coalesce(void *bp) 
 {
+    notCoalesceCount = 0;
     last_freed = 0;
 
     size_t prev_alloc = GET_ALLOC(FTRP(PREV_BLKP(bp)));
@@ -335,6 +338,7 @@ static void *coalesce(void *bp)
        bp = PREV_BLKP(bp);
 
     }
+    last_freed = bp;
 
     return bp;
 }
