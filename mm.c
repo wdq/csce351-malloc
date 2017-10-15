@@ -70,8 +70,6 @@ team_t team = {
 /* Global variables */
 static char *heap_listp;  /* pointer to first block */  
 static char *free_listp;
-static char *last_freed = 0;
-static int notCoalesceCount = 0;
 
 /* function prototypes for internal helper routines */
 static void *extend_heap(size_t words);
@@ -162,7 +160,6 @@ void *mm_malloc(size_t size)
 /* $begin mmfree */
 void mm_free(void *bp)
 {
-    last_freed = bp;
     size_t size = GET_SIZE(HDRP(bp));
 
     PUT(HDRP(bp), PACK(size, 0));
@@ -232,7 +229,6 @@ void mm_checkheap(int verbose)
 /* $begin mmextendheap */
 static void *extend_heap(size_t words) 
 {
-    last_freed = 0;
     char *bp;
     size_t size;
     
@@ -283,15 +279,6 @@ static void *find_fit(size_t asize)
 {
     /* first fit search */
     void *bp;
-    if(last_freed != 0) {
-        bp = last_freed;
-        if (!GET_ALLOC(HDRP(bp)) && (asize <= GET_SIZE(HDRP(bp)))) {
-                    //printf("a");
-
-            last_freed = 0;
-            return bp;
-        }
-    }
 
     for (bp = heap_listp; GET_SIZE(HDRP(bp)) > 0; bp = NEXT_BLKP(bp)) {
        if (!GET_ALLOC(HDRP(bp)) && (asize <= GET_SIZE(HDRP(bp)))) {
@@ -306,8 +293,6 @@ static void *find_fit(size_t asize)
  */
 static void *coalesce(void *bp) 
 {
-    notCoalesceCount = 0;
-    last_freed = 0;
 
     size_t prev_alloc = GET_ALLOC(FTRP(PREV_BLKP(bp)));
     size_t next_alloc = GET_ALLOC(HDRP(NEXT_BLKP(bp)));
@@ -338,7 +323,6 @@ static void *coalesce(void *bp)
        bp = PREV_BLKP(bp);
 
     }
-    last_freed = bp;
 
     return bp;
 }
