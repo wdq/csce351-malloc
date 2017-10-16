@@ -44,6 +44,7 @@ team_t team = {
 #define DSIZE       8       /* doubleword size (bytes) */
 #define CHUNKSIZE  (1<<12)  /* initial heap size (bytes) */
 #define OVERHEAD    8       /* overhead of header and footer (bytes) */
+#define FREE_OVERHEAD   24 // 8 (size/a) + 8 (next) + 8 (prev)
 
 // Example address: 0xf61ae840, 8 bytes size
 #define ADDRESS_SIZE    8   // bytes
@@ -95,19 +96,24 @@ static void checkblock(void *bp);
 int mm_init(void) 
 {
     /* create the initial empty heap */
-    if ((heap_listp = mem_sbrk(4*WSIZE)) == NULL) {
+    if ((heap_listp = mem_sbrk(2*FREE_OVERHEAD)) == NULL) {
        return -1;
     }
     PUT(heap_listp, 0);                        /* alignment padding */
-    PUT(heap_listp+WSIZE, PACK(OVERHEAD, 1));  /* prologue header */ 
-    PUT(heap_listp+DSIZE, PACK(OVERHEAD, 1));  /* prologue footer */ 
-    PUT(heap_listp+WSIZE+DSIZE, PACK(0, 1));   /* epilogue header */
-    heap_listp += DSIZE;
+    PUT(heap_listp+WSIZE, PACK(FREE_OVERHEAD, 1));  /* prologue header */ 
+    PUT(heap_listp+DSIZE, 0); // Next free block pointer
+    PUT(heap_listp+WSIZE+DSIZE, 0); // Previous free block pointer
+    PUT(heap_listp+FREE_OVERHEAD, PACK(FREE_OVERHEAD, 1));  /* prologue footer */ 
+    PUT(heap_listp+WSIZE+FREE_OVERHEAD, PACK(0, 1));   /* epilogue header */
+
+    free_listp = heap_listp + DSIZE; // Setup the explicit free list
 
     /* Extend the empty heap with a free block of CHUNKSIZE bytes */
     if (extend_heap(CHUNKSIZE/WSIZE) == NULL) {
        return -1;
     }
+
+    printf("mm_init() done!\n");
     return 0;
 }
 /* $end mminit */
