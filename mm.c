@@ -45,6 +45,19 @@ team_t team = {
 #define CHUNKSIZE  (1<<12)  /* initial heap size (bytes) */
 #define OVERHEAD    8       /* overhead of header and footer (bytes) */
 
+// Example address: 0xf61ae840, 8 bytes size
+// For the free_listp:
+/*
+    Can get the size getting the memory at the address. No need to store it twice.
+
+    [Previous Free Address] (8 byte)
+    [Next Free Address] (8 byte)
+    [Current Free Address] (8 byte) // Todo: might not need this one
+*/
+
+#define ADDRESS_SIZE    8   // bytes
+#define FREELIST_SIZE   24 // bytes 8 (prev) + 8 (next) + 8 (current)
+
 #define MAX(x, y) ((x) > (y)? (x) : (y))  
 
 /* Pack a size and allocated bit into a word */
@@ -87,6 +100,10 @@ Create some sort of secondary list to keep track of free spots.
     So it would have more memory usage, but it wouldn't be full blocks.
 
 Have the regular implicit free list stuff as well, but don't traverse it.
+
+The weird sorta explicit list thing seems to be just as much, if not more work, than the real thing.
+Having two lists and having them not conflict with each other on the heap is a big problem.
+
 */
 
 
@@ -105,8 +122,6 @@ int mm_init(void)
     PUT(heap_listp+DSIZE, PACK(OVERHEAD, 1));  /* prologue footer */ 
     PUT(heap_listp+WSIZE+DSIZE, PACK(0, 1));   /* epilogue header */
     heap_listp += DSIZE;
-    free_listp = heap_listp + DSIZE;
-
 
     /* Extend the empty heap with a free block of CHUNKSIZE bytes */
     if (extend_heap(CHUNKSIZE/WSIZE) == NULL) {
@@ -160,6 +175,7 @@ void *mm_malloc(size_t size)
 /* $begin mmfree */
 void mm_free(void *bp)
 {
+    //printf("Address: %x\n", bp);
     size_t size = GET_SIZE(HDRP(bp));
 
     PUT(HDRP(bp), PACK(size, 0));
