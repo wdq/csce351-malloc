@@ -71,7 +71,7 @@ team_t team = {
 #define PREV_BLKP(bp)  ((void *)(bp) - GET_SIZE(((void *)(bp) - DSIZE)))
 
 /* Given block ptr bp, compute the address of the next and previous free blocks */
-#define NEXT_FREE_BLKP(bp)  (*(void **)(bp) + DSIZE)
+#define NEXT_FREE_BLKP(bp)  (*(void **)((bp) + DSIZE))
 #define PREV_FREE_BLKP(bp)  (*(void **)(bp))
 
 
@@ -86,15 +86,16 @@ static void *extend_heap(size_t words);
 static void place(void *bp, size_t asize);
 static void *find_fit(size_t asize);
 static void *coalesce(void *bp);
+static void removeblock(void *bp);
 static void printblock(void *bp); 
 static void checkblock(void *bp);
-
 /* 
  * mm_init - Initialize the memory manager 
  */
 /* $begin mminit */
 int mm_init(void) 
 {
+    printf("\nmm_init() starting!\n");
     /* create the initial empty heap */
     if ((heap_listp = mem_sbrk(2*FREE_OVERHEAD)) == NULL) {
        return -1;
@@ -113,7 +114,7 @@ int mm_init(void)
        return -1;
     }
 
-    printf("mm_init() done!\n");
+    printf("\nmm_init() done!\n");
     return 0;
 }
 /* $end mminit */
@@ -232,11 +233,15 @@ void mm_checkheap(int verbose)
 /* $begin mmextendheap */
 static void *extend_heap(size_t words) 
 {
+    //printf("\nextend_heap() start!\n");
+
     char *bp;
     size_t size;
     
     /* Allocate an even number of words to maintain alignment */
-    size = (words % 2) ? (words+1) * WSIZE : words * WSIZE;
+    // Must be at least the size of the FREE_OVERHEAD block size.
+    size = MAX(((words % 2) ? (words+1) * WSIZE : words * WSIZE), FREE_OVERHEAD);
+
     if ((bp = mem_sbrk(size)) == (void *)-1) { 
        return NULL;
     }
@@ -245,6 +250,8 @@ static void *extend_heap(size_t words)
     PUT(HDRP(bp), PACK(size, 0));         /* free block header */
     PUT(FTRP(bp), PACK(size, 0));         /* free block footer */
     PUT(HDRP(NEXT_BLKP(bp)), PACK(0, 1)); /* new epilogue header */
+
+    //printf("\nextend_heap() done!\n");
 
     /* Coalesce if the previous block was free */
     return coalesce(bp);
@@ -296,40 +303,73 @@ static void *find_fit(size_t asize)
  */
 static void *coalesce(void *bp) 
 {
+    //printf("\ncoalesce() start!\n");
 
-    size_t prev_alloc = GET_ALLOC(FTRP(PREV_BLKP(bp)));
+    size_t prev_alloc = (GET_ALLOC(FTRP(PREV_BLKP(bp)))) || PREV_BLKP(bp) == bp;
     size_t next_alloc = GET_ALLOC(HDRP(NEXT_BLKP(bp)));
     size_t size = GET_SIZE(HDRP(bp));
 
-    if (prev_alloc && next_alloc) {            // Case 1
-
+    if (prev_alloc && next_alloc) {            // Case 1 (don't do anything), todo: maybe remove, would need to not do the else thing though
+        //printf("\ncoalesce() done A!\n");
        return bp;
 
-    } else if (prev_alloc && !next_alloc) {      // Case 2
+    } else if (prev_alloc && !next_alloc) {      // Case 2 (merge next block)
 
        size += GET_SIZE(HDRP(NEXT_BLKP(bp)));
+       removeblock(NEXT_BLKP(bp));
        PUT(HDRP(bp), PACK(size, 0));
        PUT(FTRP(bp), PACK(size,0));
 
-    } else if (!prev_alloc && next_alloc) {      // Case 3
+    } else if (!prev_alloc && next_alloc) {      // Case 3 (merge previous block)
 
        size += GET_SIZE(HDRP(PREV_BLKP(bp)));
-       PUT(FTRP(bp), PACK(size, 0));
-       PUT(HDRP(PREV_BLKP(bp)), PACK(size, 0));
        bp = PREV_BLKP(bp);
+       removeblock(bp);
+       PUT(HDRP(bp), PACK(size, 0));
+       PUT(FTRP(bp), PACK(size, 0));
 
-    } else {                                     // Case 4
+    } else {                                     // Case 4 (merge previous and next blocks)
 
        size += GET_SIZE(HDRP(PREV_BLKP(bp))) + GET_SIZE(FTRP(NEXT_BLKP(bp)));
-       PUT(HDRP(PREV_BLKP(bp)), PACK(size, 0));
-       PUT(FTRP(NEXT_BLKP(bp)), PACK(size, 0));
+       removeblock(PREV_BLKP(bp));
+       removeblock(NEXT_BLKP(bp));
        bp = PREV_BLKP(bp);
+       PUT(HDRP(bp), PACK(size, 0));
+       PUT(FTRP(bp), PACK(size, 0));
 
     }
 
+    //printf("\ncoalesce() done B!\n");
     return bp;
 }
 
+// Remove a block from the free_listp explicit free list.
+// Moves around some neighbor prev/next pointers so everything is still linked correctly (I hope).
+static void removeblock(void *bp) {
+        if(PREV_FREE_BLKP(bp)) {
+            // If the block being removed has a previous free block:
+            // Then set the previous free block's next free block to the block being removed's next free block.
+            // Ex: removeblock(B)
+            // Before: [A] -> [B] -> [C]
+            // After:  [A] -> [C]
+            //         [B] -> [C]
+            NEXT_FREE_BLKP(PREV_FREE_BLKP(bp)) = NEXT_FREE_BLKP(bp); 
+        } else {
+            // If the block being removed doesn't have a previous free block, then it's the first block in free_listp.
+            // Set the free_listp to point to the next block after the one being removed.
+            // Ex: removeblock(A)
+            // Before: free_listp -> [A] -> [B]
+            // After:  free_listp -> [B]
+            //                [A] -> [B]
+            free_listp = NEXT_FREE_BLKP(bp);
+        }
+        // Then point the next free block's previous free block pointer to the previous free block of the one being removed.
+        // Ex: removeblock(B)
+        // Before: [A] <- [B] <- [C]
+        // After:  [A] <- [C]
+        //         [A] <- [B]
+        PREV_FREE_BLKP(NEXT_FREE_BLKP(bp)) = PREV_FREE_BLKP(bp);
+}
 
 static void printblock(void *bp) 
 {
