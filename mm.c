@@ -46,17 +46,7 @@ team_t team = {
 #define OVERHEAD    8       /* overhead of header and footer (bytes) */
 
 // Example address: 0xf61ae840, 8 bytes size
-// For the free_listp:
-/*
-    Can get the size getting the memory at the address. No need to store it twice.
-
-    [Previous Free Address] (8 byte)
-    [Next Free Address] (8 byte)
-    [Current Free Address] (8 byte) // Todo: might not need this one
-*/
-
 #define ADDRESS_SIZE    8   // bytes
-#define FREELIST_SIZE   24 // bytes 8 (prev) + 8 (next) + 8 (current)
 
 #define MAX(x, y) ((x) > (y)? (x) : (y))  
 
@@ -91,21 +81,6 @@ static void *find_fit(size_t asize);
 static void *coalesce(void *bp);
 static void printblock(void *bp); 
 static void checkblock(void *bp);
-
-/*
-Yeah, maybe try something weird:
-
-Create some sort of secondary list to keep track of free spots. 
-    [Pointer to previous free block][Pointer to current free block][Pointer to next free block]
-    So it would have more memory usage, but it wouldn't be full blocks.
-
-Have the regular implicit free list stuff as well, but don't traverse it.
-
-The weird sorta explicit list thing seems to be just as much, if not more work, than the real thing.
-Having two lists and having them not conflict with each other on the heap is a big problem.
-
-*/
-
 
 /* 
  * mm_init - Initialize the memory manager 
