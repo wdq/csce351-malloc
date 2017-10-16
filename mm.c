@@ -62,17 +62,23 @@ team_t team = {
 #define GET_ALLOC(p) (GET(p) & 0x1)
 
 /* Given block ptr bp, compute address of its header and footer */
-#define HDRP(bp)       ((char *)(bp) - WSIZE)  
-#define FTRP(bp)       ((char *)(bp) + GET_SIZE(HDRP(bp)) - DSIZE)
+#define HDRP(bp)       ((void *)(bp) - WSIZE)  
+#define FTRP(bp)       ((void *)(bp) + GET_SIZE(HDRP(bp)) - DSIZE)
 
 /* Given block ptr bp, compute address of next and previous blocks */
-#define NEXT_BLKP(bp)  ((char *)(bp) + GET_SIZE(((char *)(bp) - WSIZE)))
-#define PREV_BLKP(bp)  ((char *)(bp) - GET_SIZE(((char *)(bp) - DSIZE)))
+#define NEXT_BLKP(bp)  ((void *)(bp) + GET_SIZE(((void *)(bp) - WSIZE)))
+#define PREV_BLKP(bp)  ((void *)(bp) - GET_SIZE(((void *)(bp) - DSIZE)))
+
+/* Given block ptr bp, compute the address of the next and previous free blocks */
+#define NEXT_FREE_BLKP(bp)  (*(void **)(bp) + DSIZE)
+#define PREV_FREE_BLKP(bp)  (*(void **)(bp))
+
+
 /* $end mallocmacros */
 
 /* Global variables */
 static char *heap_listp;  /* pointer to first block */  
-static char *free_listp;
+static char *free_listp; /* pointer to the first free block */
 
 /* function prototypes for internal helper routines */
 static void *extend_heap(size_t words);
