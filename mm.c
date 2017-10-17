@@ -300,7 +300,7 @@ static void place(void *bp, size_t asize)
 static void *find_fit(size_t asize)
 {
     printf("\nfind_fit() start!\n");
-    /* first fit search */
+    // first fit search 
     void *bp;
 
     for (bp = free_listp; GET_ALLOC(HDRP(bp)) == 0; bp = NEXT_FREE_BLKP(bp)) {
@@ -332,9 +332,9 @@ static void *coalesce(void *bp)
     if (prev_alloc && !next_alloc) {      // Case 1 (merge next block)
 printf("A\n");
        size += GET_SIZE(HDRP(NEXT_BLKP(bp)));
-       removeblock(NEXT_BLKP(NEXT_BLKP(bp)));
+       removeblock(NEXT_BLKP(bp));
        PUT(HDRP(bp), PACK(size, 0));
-       PUT(FTRP(bp), PACK(size,0));
+       PUT(FTRP(bp), PACK(size, 0));
 
     } else if (!prev_alloc && next_alloc) {      // Case 2 (merge previous block)
 printf("B\n");
