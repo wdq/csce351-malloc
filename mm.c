@@ -96,7 +96,6 @@ static void checkblock(void *bp);
 /* $begin mminit */
 int mm_init(void) 
 {
-    //printf("\nmm_init() starting!\n");
     /* create the initial empty heap */
     if ((heap_listp = mem_sbrk(4*DSIZE)) == NULL) {
        return -1;
@@ -113,7 +112,6 @@ int mm_init(void)
        return -1;
     }
 
-    //printf("\nmm_init() done!\n");
     return 0;
 }
 /* $end mminit */
@@ -124,7 +122,6 @@ int mm_init(void)
 /* $begin mmmalloc */
 void *mm_malloc(size_t size) 
 {
-    printf("\nmm_malloc start!\n");
     size_t asize;      /* adjusted block size */
     size_t extendsize; /* amount to extend heap if no fit */
     char *bp;      
@@ -141,24 +138,19 @@ void *mm_malloc(size_t size)
     } else {
        asize = DSIZE * ((size + (DSIZE) + (DSIZE-1)) / DSIZE);
     }    
-    //printf("size=%i\n", size);
-    //printf("asize=%i\n", asize);
 
     /* Search the free list for a fit */
     if ((bp = find_fit(asize)) != NULL) {
        place(bp, asize);
-       printf("\nmm_malloc() stop B!\n");
        return bp;
     }
 
     /* No fit found. Get more memory and place the block */
     extendsize = MAX(asize,CHUNKSIZE);
     if ((bp = extend_heap(extendsize/WSIZE)) == NULL) {
-        printf("\nmm_malloc() stop C!\n");
        return NULL;
     }
     place(bp, asize);
-    printf("\nmm_malloc() stop D!\n");
     return bp;
 } 
 /* $end mmmalloc */
@@ -169,8 +161,6 @@ void *mm_malloc(size_t size)
 /* $begin mmfree */
 void mm_free(void *bp)
 {
-    printf("\nmm_free start!\n");
-    //printf("Address: %x\n", bp);
     size_t size = GET_SIZE(HDRP(bp));
 
     PUT(HDRP(bp), PACK(size, 0));
@@ -240,7 +230,6 @@ void mm_checkheap(int verbose)
 /* $begin mmextendheap */
 static void *extend_heap(size_t words) 
 {
-    //printf("\nextend_heap() start!\n");
 
     char *bp;
     size_t size;
@@ -258,7 +247,6 @@ static void *extend_heap(size_t words)
     PUT(FTRP(bp), PACK(size, 0));         /* free block footer */
     PUT(HDRP(NEXT_BLKP(bp)), PACK(0, 1)); /* new epilogue header */
 
-    //printf("\nextend_heap() done!\n");
 
     /* Coalesce if the previous block was free */
     return coalesce(bp);
@@ -274,7 +262,6 @@ static void *extend_heap(size_t words)
 static void place(void *bp, size_t asize)
 /* $end mmplace-proto */
 {
-    printf("\nplace() start!\n");
 
     size_t csize = GET_SIZE(HDRP(bp));   
 
@@ -299,23 +286,19 @@ static void place(void *bp, size_t asize)
  */
 static void *find_fit(size_t asize)
 {
-    printf("\nfind_fit() start!\n");
     // first fit search 
     void *bp;
 
     for (bp = free_listp; GET_ALLOC(HDRP(bp)) == 0; bp = NEXT_FREE_BLKP(bp)) {
        if ((asize <= GET_SIZE(HDRP(bp)))) {
-            printf("\nfind_fit() stop A!\n");
            return bp;
        }
     }
 
     int extendsize = MAX(asize, DSIZE + DSIZE);
     bp = extend_heap(extendsize/4);
-    printf("\nfind_fit() stop B!\n");
     return bp;
 
-    //return NULL; /* no fit */
 }
 
 /*
@@ -323,21 +306,18 @@ static void *find_fit(size_t asize)
  */
 static void *coalesce(void *bp) 
 {
-    printf("\ncoalesce() start!\n");
 
     size_t prev_alloc = (GET_ALLOC(FTRP(PREV_BLKP(bp)))) || PREV_BLKP(bp) == bp;
     size_t next_alloc = GET_ALLOC(HDRP(NEXT_BLKP(bp)));
     size_t size = GET_SIZE(HDRP(bp));
 
     if (prev_alloc && !next_alloc) {      // Case 1 (merge next block)
-printf("A\n");
        size += GET_SIZE(HDRP(NEXT_BLKP(bp)));
        removeblock(NEXT_BLKP(bp));
        PUT(HDRP(bp), PACK(size, 0));
        PUT(FTRP(bp), PACK(size, 0));
 
     } else if (!prev_alloc && next_alloc) {      // Case 2 (merge previous block)
-printf("B\n");
        size += GET_SIZE(HDRP(PREV_BLKP(bp)));
        bp = PREV_BLKP(bp);
        removeblock(bp);
@@ -345,7 +325,6 @@ printf("B\n");
        PUT(FTRP(bp), PACK(size, 0));
 
     } else if(!prev_alloc && !next_alloc) {      // Case 3 (merge previous and next blocks)
-printf("C\n");
        size += GET_SIZE(HDRP(PREV_BLKP(bp))) + GET_SIZE(HDRP(NEXT_BLKP(bp)));
        removeblock(PREV_BLKP(bp));
        removeblock(NEXT_BLKP(bp));
@@ -357,13 +336,11 @@ printf("C\n");
 
     addblock(bp);
 
-    printf("\ncoalesce() done!\n");
     return bp;
 }
 
 // Add a block to the start of the free_listp explicit free list.
 static void addblock(void *bp) {
-    printf("Adblock\n");
     NEXT_FREE_BLKP(bp) = free_listp; // Point the new block's next free block to the start of the list.
     PREV_FREE_BLKP(free_listp) = bp; // Point the start of the list's previous free block to the new block.
     PREV_FREE_BLKP(bp) = NULL; // Point the new block's previous free block to nothing.
@@ -373,7 +350,6 @@ static void addblock(void *bp) {
 // Remove a block from the free_listp explicit free list.
 // Moves around some neighbor prev/next pointers so everything is still linked correctly (I hope).
 static void removeblock(void *bp) {
-    printf("Removeblock\n");
         if(PREV_FREE_BLKP(bp)) {
             // If the block being removed has a previous free block:
             // Then set the previous free block's next free block to the block being removed's next free block.
