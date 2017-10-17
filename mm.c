@@ -97,20 +97,18 @@ int mm_init(void)
 {
     printf("\nmm_init() starting!\n");
     /* create the initial empty heap */
-    if ((heap_listp = mem_sbrk(2*FREE_OVERHEAD)) == NULL) {
+    if ((heap_listp = mem_sbrk(4*DSIZE)) == NULL) {
        return -1;
     }
     PUT(heap_listp, 0);                        /* alignment padding */
-    PUT(heap_listp+WSIZE, PACK(FREE_OVERHEAD, 1));  /* prologue header */ 
-    PUT(heap_listp+DSIZE, 0); // Next free block pointer
-    PUT(heap_listp+WSIZE+DSIZE, 0); // Previous free block pointer
-    PUT(heap_listp+FREE_OVERHEAD, PACK(FREE_OVERHEAD, 1));  /* prologue footer */ 
-    PUT(heap_listp+WSIZE+FREE_OVERHEAD, PACK(0, 1));   /* epilogue header */
+    PUT(heap_listp+WSIZE, PACK(DSIZE, 1));  /* prologue header */ 
+    PUT(heap_listp+DSIZE, PACK(DSIZE, 1)); /* prologue footer */
+    PUT(heap_listp+DSIZE+WSIZE, PACK(0, 1)); /* epilogue header */
 
     free_listp = heap_listp + DSIZE; // Setup the explicit free list
 
     /* Extend the empty heap with a free block of CHUNKSIZE bytes */
-    if (extend_heap(CHUNKSIZE/WSIZE) == NULL) {
+    if (extend_heap(WSIZE) == NULL) {
        return -1;
     }
 
@@ -125,34 +123,42 @@ int mm_init(void)
 /* $begin mmmalloc */
 void *mm_malloc(size_t size) 
 {
+    printf("\nmm_malloc start!\n");
     size_t asize;      /* adjusted block size */
     size_t extendsize; /* amount to extend heap if no fit */
     char *bp;      
 
     /* Ignore spurious requests */
     if (size <= 0) {
+        printf("\nmm_malloc() stop A!\n");
        return NULL;
     }
 
     /* Adjust block size to include overhead and alignment reqs. */
+    //asize = MAX(((size + (DSIZE-1)) & ~0x7) + DSIZE, FREE_OVERHEAD);
     if (size <= DSIZE) {
        asize = DSIZE + OVERHEAD;
     } else {
        asize = DSIZE * ((size + (OVERHEAD) + (DSIZE-1)) / DSIZE);
-    }
+    }    
+    printf("size=%i\n", size);
+    printf("asize=%i\n", asize);
     
     /* Search the free list for a fit */
     if ((bp = find_fit(asize)) != NULL) {
        place(bp, asize);
+       printf("\nmm_malloc() stop B!\n");
        return bp;
     }
 
     /* No fit found. Get more memory and place the block */
     extendsize = MAX(asize,CHUNKSIZE);
     if ((bp = extend_heap(extendsize/WSIZE)) == NULL) {
+        printf("\nmm_malloc() stop C!\n");
        return NULL;
     }
     place(bp, asize);
+    printf("\nmm_malloc() stop D!\n");
     return bp;
 } 
 /* $end mmmalloc */
@@ -163,6 +169,7 @@ void *mm_malloc(size_t size)
 /* $begin mmfree */
 void mm_free(void *bp)
 {
+    printf("\nmm_free start!\n");
     //printf("Address: %x\n", bp);
     size_t size = GET_SIZE(HDRP(bp));
 
@@ -267,18 +274,23 @@ static void *extend_heap(size_t words)
 static void place(void *bp, size_t asize)
 /* $end mmplace-proto */
 {
+    printf("\nplace() start!\n");
+
     size_t csize = GET_SIZE(HDRP(bp));   
 
-    if ((csize - asize) >= (DSIZE + OVERHEAD)) { 
+    if ((csize - asize) >= (FREE_OVERHEAD)) { 
        PUT(HDRP(bp), PACK(asize, 1));
        PUT(FTRP(bp), PACK(asize, 1));
+       removeblock(bp);
        bp = NEXT_BLKP(bp);
        PUT(HDRP(bp), PACK(csize-asize, 0));
        PUT(FTRP(bp), PACK(csize-asize, 0));
     } else { 
        PUT(HDRP(bp), PACK(csize, 1));
        PUT(FTRP(bp), PACK(csize, 1));
+       removeblock(bp);
     }
+    coalesce(bp);
 }
 /* $end mmplace */
 
@@ -287,14 +299,17 @@ static void place(void *bp, size_t asize)
  */
 static void *find_fit(size_t asize)
 {
+    printf("\nfind_fit() start!\n");
     /* first fit search */
     void *bp;
 
-    for (bp = heap_listp; GET_SIZE(HDRP(bp)) > 0; bp = NEXT_BLKP(bp)) {
-       if (!GET_ALLOC(HDRP(bp)) && (asize <= GET_SIZE(HDRP(bp)))) {
+    for (bp = free_listp; GET_ALLOC(HDRP(bp)) == 0; bp = NEXT_FREE_BLKP(bp)) {
+       if ((asize <= GET_SIZE(HDRP(bp)))) {
+            printf("\nfind_fit() stop A!\n");
            return bp;
        }
     }
+    printf("\nfind_fit() stop B!\n");
     return NULL; /* no fit */
 }
 
