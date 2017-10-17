@@ -37,6 +37,13 @@
  *      ----------------------------------- 
  *      ...................................
  *
+ *
+ * Currently seems to score a 45 + 18 = 63 on csce.
+ * On my desktop computer that this was developed it seems to score a 45 + 40 = 85.
+ * It's interesting that it has a much higher throughput on my desktop.
+ * Probably a combination of DDR4 vs DDR3, along with having a newer processor.
+ *
+ * // TODO: With the -g option it shows correct: 11, but the correctness points are 33. Does that my solution is only correct 1/3 of the time?
  */
 
 #include <stdio.h>
