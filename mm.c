@@ -38,12 +38,17 @@
  *      ...................................
  *
  *
- * Currently seems to score a 45 + 18 = 63 on csce.
- * On my desktop computer that this was developed it seems to score a 45 + 40 = 85.
+ * Currently seems to score a 44 + 32 = 76 on csce.
+ * On my desktop computer that this was developed it seems to score a 44 + 40 = 84.
  * It's interesting that it has a much higher throughput on my desktop.
  * Probably a combination of DDR4 vs DDR3, along with having a newer processor.
+ * As I optimized the code there wasn't much of an improvement on my desktop, but there was an improvement on CSCE.
+ * Performance is weakest with the binary and realloc traces.
+ * Performance seems to vary slightly from run to run (typically only +/- a point or two in throughput). Could have to do with the server load.
+ * 
  *
  * // TODO: With the -g option it shows correct: 11, but the correctness points are 33. Does that my solution is only correct 1/3 of the time?
+ * // The mm-sample also shows correct score of 11, and I'm pretty sure the example provided was correct, so it's probably fine.
  */
 
 #include <stdio.h>
@@ -195,15 +200,15 @@ void mm_free(void *bp)
 // $end mmfree
 
 /*
- * mm_realloc - naive implementation of mm_realloc
+ * mm_realloc - a slightly less naive implementation of mm_realloc
+ *              I use some tricks to improve performance.
+ *              If the block is already too big, then shrink it if possible to improve utilization.
+ *              If the block is already the right size, just use it. 
+ *              If the next block is available, and the combined size is right, just extend the block, similar to coalesing.
  */
 // $begin mm_realloc
-// TODO: Look into optimizing this. The provided implementation works, but there could possibly be room for improvement.
 void *mm_realloc(void *ptr, size_t size)
 {
-
-
-    
     size_t currentSize = GET_SIZE(HDRP(ptr));
     size_t newSize =  (((size_t)(size) + (OVERHEAD-1)) & ~0x7) + OVERHEAD;
     if(newSize < 3 * OVERHEAD) {
@@ -240,19 +245,19 @@ void *mm_realloc(void *ptr, size_t size)
         PUT(FTRP(ptr), PACK(combined_size, 1));
         return ptr;
     }
-    
-        if ((newp = mm_malloc(size)) == NULL) {
-        	printf("ERROR: mm_malloc failed in mm_realloc\n");
-        	exit(1);
-        }
-        copySize = GET_SIZE(HDRP(ptr));
-        if (size < copySize) {
-          copySize = size;
-        }
-        memcpy(newp, ptr, copySize);
-        mm_free(ptr);
-        return newp;  
 
+    // If none of the above tricks can be used, just do what mm-sample did.
+    if ((newp = mm_malloc(size)) == NULL) {
+       	printf("ERROR: mm_malloc failed in mm_realloc\n");
+       	exit(1);
+    }
+    copySize = GET_SIZE(HDRP(ptr));
+    if (size < copySize) {
+      copySize = size;
+    }
+    memcpy(newp, ptr, copySize);
+    mm_free(ptr);
+    return newp;  
 }
 // $end mm_realloc
 
@@ -367,9 +372,14 @@ static void place(void *bp, size_t asize)
 static void *find_fit(size_t asize)
 {
     void *bp;
-
+    int iterationCounter = 0;
     // Find the first fit by looping through the explicit free list.
     for (bp = free_listp; GET_ALLOC(HDRP(bp)) == 0; bp = NEXT_FREE_BLKP(bp)) {
+        iterationCounter++;
+        if(iterationCounter > 50) {
+            bp = extend_heap(asize/WSIZE);
+            return bp;
+        }
        if (!GET_ALLOC(HDRP(bp)) && (asize <= GET_SIZE(HDRP(bp)))) {
            return bp;
        }
