@@ -201,24 +201,46 @@ void mm_free(void *bp)
 // TODO: Look into optimizing this. The provided implementation works, but there could possibly be room for improvement.
 void *mm_realloc(void *ptr, size_t size)
 {
+
+    // If the block is already the right size, then just use it.
+    if(GET_SIZE(HDRP(ptr)) + OVERHEAD <= GET_SIZE(HDRP(ptr))) {
+        return ptr;
+    }
+    
+    size_t currentSize = GET_SIZE(HDRP(ptr));
+    size_t newSize =  (((size_t)(size) + (OVERHEAD-1)) & ~0x7) + OVERHEAD;
+    if(newSize < 3 * OVERHEAD) {
+      newSize = 3 * OVERHEAD;
+    }
     void *newp;
     size_t copySize;
-
-    // Quit if memory can't be allocated.
-    if ((newp = mm_malloc(size)) == NULL) {
-       printf("ERROR: mm_malloc failed in mm_realloc\n");
-       exit(1);
+    
+    // Shrinking size
+    if(newSize <= currentSize) {    
+      // Don't do anything if there isn't enough space to split the block.
+      if(currentSize - newSize <= 3 * OVERHEAD) {
+        return ptr;
+      }
+      
+      PUT(HDRP(ptr), PACK(newSize, 1));
+      PUT(FTRP(ptr), PACK(newSize, 1));
+      PUT(HDRP(NEXT_BLKP(ptr)), PACK(currentSize - newSize, 1));
+      mm_free(NEXT_BLKP(ptr));
+      return ptr;
     }
+    
+        if ((newp = mm_malloc(size)) == NULL) {
+        	printf("ERROR: mm_malloc failed in mm_realloc\n");
+        	exit(1);
+        }
+        copySize = GET_SIZE(HDRP(ptr));
+        if (size < copySize) {
+          copySize = size;
+        }
+        memcpy(newp, ptr, copySize);
+        mm_free(ptr);
+        return newp;  
 
-    // Copy the memory to the new position, and free the old position.
-    copySize = GET_SIZE(HDRP(ptr));
-    if (size < copySize) {
-      copySize = size;
-    }
-    memcpy(newp, ptr, copySize);
-    mm_free(ptr);
-
-    return newp;
 }
 // $end mm_realloc
 
