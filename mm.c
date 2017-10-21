@@ -202,10 +202,7 @@ void mm_free(void *bp)
 void *mm_realloc(void *ptr, size_t size)
 {
 
-    // If the block is already the right size, then just use it.
-    if(GET_SIZE(HDRP(ptr)) + OVERHEAD <= GET_SIZE(HDRP(ptr))) {
-        return ptr;
-    }
+
     
     size_t currentSize = GET_SIZE(HDRP(ptr));
     size_t newSize =  (((size_t)(size) + (OVERHEAD-1)) & ~0x7) + OVERHEAD;
@@ -215,7 +212,7 @@ void *mm_realloc(void *ptr, size_t size)
     void *newp;
     size_t copySize;
     
-    // Shrinking size
+    // Shrink the existing block if possible. 
     if(newSize <= currentSize) {    
       // Don't do anything if there isn't enough space to split the block.
       if(currentSize - newSize <= 3 * OVERHEAD) {
@@ -227,6 +224,21 @@ void *mm_realloc(void *ptr, size_t size)
       PUT(HDRP(NEXT_BLKP(ptr)), PACK(currentSize - newSize, 1));
       mm_free(NEXT_BLKP(ptr));
       return ptr;
+    }
+
+    // If the block is already the right size, then just use it.
+    if(GET_SIZE(HDRP(ptr)) + OVERHEAD <= GET_SIZE(HDRP(ptr))) {
+        return ptr;
+    }
+
+    // If the next block is available, and the combined size is big enough, combine the blocks and use it.
+    size_t next_alloc = GET_ALLOC(HDRP(NEXT_BLKP(ptr)));
+    size_t combined_size = GET_SIZE(HDRP(NEXT_BLKP(ptr))) + currentSize;
+    if(!next_alloc && combined_size >= newSize) {
+        removeblock(NEXT_BLKP(ptr));
+        PUT(HDRP(ptr), PACK(combined_size, 1));
+        PUT(FTRP(ptr), PACK(combined_size, 1));
+        return ptr;
     }
     
         if ((newp = mm_malloc(size)) == NULL) {
