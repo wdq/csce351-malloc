@@ -38,12 +38,12 @@
  *      ...................................
  *
  *
- * Currently seems to score a 44 + 32 = 76 on csce.
+ * Currently seems to score a 44 + 40 = 84 on csce.
  * On my desktop computer that this was developed it seems to score a 44 + 40 = 84.
- * It's interesting that it has a much higher throughput on my desktop.
+ * It's interesting that the score on my desktop was much higher until I did some optimization.
  * Probably a combination of DDR4 vs DDR3, along with having a newer processor.
- * As I optimized the code there wasn't much of an improvement on my desktop, but there was an improvement on CSCE.
- * Performance is weakest with the binary and realloc traces.
+ * As I optimized the code there wasn't much of an improvement on my desktop (the score actually decreased by one), but there was an improvement on CSCE.
+ * Performance is weakest with the binary and realloc traces, but they are a lot better now that it has been optimized.
  * Performance seems to vary slightly from run to run (typically only +/- a point or two in throughput). Could have to do with the server load.
  * 
  *
@@ -375,11 +375,17 @@ static void *find_fit(size_t asize)
     int iterationCounter = 0;
     // Find the first fit by looping through the explicit free list.
     for (bp = free_listp; GET_ALLOC(HDRP(bp)) == 0; bp = NEXT_FREE_BLKP(bp)) {
+
+        // Keep track of how long we've been searching. 
+        // If we've gone through a lot of blocks, then just give up and extend the heap.
+        // This seems to help the binary traces a lot.
+        // The iteration number doesn't seem to make that much of a difference, and 100 works well.
         iterationCounter++;
         if(iterationCounter > 100) {
             bp = extend_heap(asize/WSIZE);
             return bp;
         }
+
        if (!GET_ALLOC(HDRP(bp)) && (asize <= GET_SIZE(HDRP(bp)))) {
            return bp;
        }
