@@ -376,7 +376,7 @@ static void *find_fit(size_t asize)
     // Find the first fit by looping through the explicit free list.
     for (bp = free_listp; GET_ALLOC(HDRP(bp)) == 0; bp = NEXT_FREE_BLKP(bp)) {
         iterationCounter++;
-        if(iterationCounter > 50) {
+        if(iterationCounter > 100) {
             bp = extend_heap(asize/WSIZE);
             return bp;
         }
